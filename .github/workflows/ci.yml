@@ -1,0 +1,49 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 22
+
+    - name: Set environment variables
+      run: |
+        echo "PORT=${{ secrets.PORT }}"
+        echo "MONGO_URI=${{ secrets.MONGO_URI }}"
+        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}"
+
+    - name: Stop existing PM2 services
+      run: pm2 stop all || true
+
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: |
+        yarn install
+
+    - name: Install frontend dependencies and build
+      working-directory: ./frontend
+      run: |
+        yarn install
+        yarn build
+
+    - name: Create .env file
+      run: |
+        cd ./backend
+        echo "${{ secrets.PROD }}" > .env
+
+    - name: Restart services with PM2
+      run: |
+        pm2 start "yarn --cwd backend start" --name backend
+        pm2 serve frontend/build 3000 --name frontend --spa
+        pm2 save
